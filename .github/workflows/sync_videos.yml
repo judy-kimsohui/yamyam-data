@@ -1,0 +1,25 @@
+name: Sync new videos to S3 & DB
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.mp4'
+
+jobs:
+  sync-videos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run sync script on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 300s
+          script: |
+            set -e
+            cd ~/app/scripts
+            python3 -c "import boto3" 2>/dev/null || pip3 install boto3 -q
+            python3 sync_github_to_s3.py
