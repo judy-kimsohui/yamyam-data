@@ -28,4 +28,4 @@ jobs:
               git clone https://github.com/judy-kimsohui/yamyam-data.git ~/yamyam-data -q
             fi
             python3 -c "import boto3" 2>/dev/null || pip3 install boto3 -q
-            python3 ~/yamyam-data/scripts/sync_github_to_s3.py
+            GITHUB_TOKEN="${{ secrets.YAMYAM_PAT }}" python3 ~/yamyam-data/scripts/sync_github_to_s3.py

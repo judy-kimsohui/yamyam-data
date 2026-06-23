@@ -31,6 +31,7 @@ GitHub repo (judy-kimsohui/yamyam-data) 의 .mp4 파일 목록을 확인하고,
 ──────────────────────────────────────────────────────────────────
 """
 
+import base64
 import json
 import os
 import random
@@ -80,6 +81,83 @@ EXCLUDE_USER_IDS: set[int] = {
 }
 
 SYNC_STATE = Path(__file__).parent / ".synced_videos.json"
+
+# ── GitHub 인증 토큰 (LFS 다운로드용) ──────────────────────────────
+def _get_github_token() -> str:
+    t = os.environ.get("GITHUB_TOKEN", "")
+    if t:
+        return t
+    try:
+        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, check=True)
+        return r.stdout.strip()
+    except Exception:
+        return ""
+
+GITHUB_TOKEN: str = _get_github_token()
+
+# ── LFS 다운로드 헬퍼 ──────────────────────────────────────────────
+_LFS_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+
+def _is_lfs_pointer(data: bytes) -> bool:
+    return data[:50].startswith(_LFS_PREFIX)
+
+def _parse_lfs_pointer(data: bytes) -> tuple[str, int]:
+    oid = size = None
+    for line in data.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("oid sha256:"):
+            oid = line[len("oid sha256:"):].strip()
+        elif line.startswith("size "):
+            size = int(line[5:].strip())
+    if not oid or not size:
+        raise ValueError(f"LFS 포인터 파싱 실패: {data[:200]}")
+    return oid, size
+
+def _download_via_lfs_batch(oid: str, size: int, tmp_path: str) -> None:
+    lfs_url = (
+        f"https://github.com/{GITHUB_OWNER}/{GITHUB_REPO}.git"
+        "/info/lfs/objects/batch"
+    )
+    payload = json.dumps({
+        "operation": "download",
+        "transfers": ["basic"],
+        "objects": [{"oid": oid, "size": size}],
+    }).encode()
+    headers = {
+        "Content-Type": "application/vnd.git-lfs+json",
+        "Accept": "application/vnd.git-lfs+json",
+    }
+    if GITHUB_TOKEN:
+        creds = base64.b64encode(f"{GITHUB_TOKEN}:".encode()).decode()
+        headers["Authorization"] = f"Basic {creds}"
+    req = urllib.request.Request(lfs_url, data=payload, headers=headers, method="POST")
+    with urllib.request.urlopen(req) as resp:
+        lfs_resp = json.loads(resp.read())
+    obj = lfs_resp["objects"][0]
+    if "error" in obj:
+        raise RuntimeError(f"LFS batch 오류: {obj['error']}")
+    dl = obj["actions"]["download"]
+    dl_req = urllib.request.Request(dl["href"], headers=dl.get("header", {}))
+    with urllib.request.urlopen(dl_req) as resp:
+        with open(tmp_path, "wb") as f:
+            while chunk := resp.read(8 * 1024 * 1024):
+                f.write(chunk)
+
+def download_github_file(github_path: str, tmp_path: str) -> None:
+    """GitHub에서 파일 다운로드. LFS 포인터이면 실제 파일로 리졸브."""
+    raw_url = f"{RAW_BASE_URL}/{urllib.request.quote(github_path)}"
+    req_headers = {"User-Agent": "yamyam-sync"}
+    if GITHUB_TOKEN:
+        req_headers["Authorization"] = f"token {GITHUB_TOKEN}"
+    req = urllib.request.Request(raw_url, headers=req_headers)
+    with urllib.request.urlopen(req) as resp:
+        data = resp.read()
+    if _is_lfs_pointer(data):
+        oid, sz = _parse_lfs_pointer(data)
+        print(f"  LFS → oid={oid[:12]}… size={sz:,}B")
+        _download_via_lfs_batch(oid, sz, tmp_path)
+    else:
+        with open(tmp_path, "wb") as f:
+            f.write(data)
 
 
 # ── 상태 파일 ──────────────────────────────────────────────────────
@@ -298,13 +376,12 @@ def main():
         print(f"  S3 : {s3_key}")
         print(f"  DB : user={user_id}, team={team_id}, {meal_type}, {meal_date}")
 
-        download_url = f"{RAW_BASE_URL}/{urllib.request.quote(github_path)}"
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
             tmp_path = tmp.name
 
         try:
             if not dry_run:
-                urllib.request.urlretrieve(download_url, tmp_path)
+                download_github_file(github_path, tmp_path)
 
             video_url = upload_to_s3(tmp_path, s3_key, dry_run)
             description = random.choice(DESCRIPTIONS)
