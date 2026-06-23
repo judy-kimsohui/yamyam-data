@@ -96,9 +96,10 @@ def save_sync_state(state: dict):
 def run_mysql(sql: str) -> str:
     result = subprocess.run(
         ["docker", "exec", DB_CONTAINER,
-         "mysql", f"-u{DB_USER}", f"-p{DB_PASS}",
+         "mysql", "--default-character-set=utf8mb4",
+         f"-u{DB_USER}", f"-p{DB_PASS}",
          "--batch", "--skip-column-names", DB_NAME, "-e", sql],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8",
     )
     return result.stdout
 
@@ -216,8 +217,9 @@ def insert_video_to_db(
 
     result = subprocess.run(
         ["docker", "exec", "-i", DB_CONTAINER,
-         "mysql", f"-u{DB_USER}", f"-p{DB_PASS}", DB_NAME],
-        input=sql, text=True, capture_output=True,
+         "mysql", "--default-character-set=utf8mb4",
+         f"-u{DB_USER}", f"-p{DB_PASS}", DB_NAME],
+        input=sql, text=True, encoding="utf-8", capture_output=True,
     )
     if result.returncode != 0:
         raise RuntimeError(f"DB INSERT 실패: {result.stderr}")
