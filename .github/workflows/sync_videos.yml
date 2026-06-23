@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '**.mp4'
+  workflow_dispatch:  # 수동 실행 허용
 
 jobs:
   sync-videos:
