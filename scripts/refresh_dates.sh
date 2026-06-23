@@ -12,11 +12,10 @@
 #   0 0 * * * /path/to/yamyam/scripts/refresh_dates.sh >> /path/to/yamyam/logs/refresh.log 2>&1
 #
 # 환경변수로 재정의 가능:
-#   DB_HOST DB_PORT DB_USER DB_PASSWORD DB_NAME EXCLUDE_USER_IDS
+#   DB_CONTAINER DB_USER DB_PASSWORD DB_NAME EXCLUDE_USER_IDS
 # ================================================================
 
-DB_HOST="${DB_HOST:-127.0.0.1}"
-DB_PORT="${DB_PORT:-3307}"
+DB_CONTAINER="${DB_CONTAINER:-app-mysql-1}"
 DB_USER="${DB_USER:-root}"
 DB_PASSWORD="${DB_PASSWORD:-ssafy}"
 DB_NAME="${DB_NAME:-yamyamdb}"
@@ -24,7 +23,7 @@ DB_NAME="${DB_NAME:-yamyamdb}"
 # 날짜 이동에서 제외할 user_id (나 = ssafy5)
 EXCLUDE_USER_IDS="${EXCLUDE_USER_IDS:-5}"
 
-MYSQL="mysql -h${DB_HOST} -P${DB_PORT} -u${DB_USER} -p${DB_PASSWORD} ${DB_NAME}"
+MYSQL="docker exec -i ${DB_CONTAINER} mysql -u${DB_USER} -p${DB_PASSWORD} ${DB_NAME}"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] meal_date 갱신 시작 (제외 user_id: ${EXCLUDE_USER_IDS})"
 

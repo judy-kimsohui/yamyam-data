@@ -21,8 +21,7 @@ GitHub repo (judy-kimsohui/yamyam-data) 의 .mp4 파일 목록을 확인하고,
   EXCLUDE_USER_IDS       (기본: "5"  — 나 자신 user_id, 쉼표 구분 복수 가능)
   S3_BUCKET              (기본: yamyam-videos-bucket)
   S3_REGION              (기본: ap-northeast-2)
-  DB_HOST                (기본: 127.0.0.1)
-  DB_PORT                (기본: 3307)
+  DB_CONTAINER           (기본: app-mysql-1  — docker exec 대상 컨테이너)
   DB_USER                (기본: root)
   DB_PASSWORD            (기본: ssafy)
   DB_NAME                (기본: yamyamdb)
@@ -48,13 +47,12 @@ GITHUB_REPO   = "yamyam-data"
 GITHUB_BRANCH = "main"
 RAW_BASE_URL  = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}"
 
-S3_BUCKET = os.environ.get("S3_BUCKET",  "yamyam-videos-bucket")
-S3_REGION = os.environ.get("S3_REGION",  "ap-northeast-2")
-DB_HOST   = os.environ.get("DB_HOST",    "127.0.0.1")
-DB_PORT   = os.environ.get("DB_PORT",    "3307")
-DB_USER   = os.environ.get("DB_USER",    "root")
-DB_PASS   = os.environ.get("DB_PASSWORD","ssafy")
-DB_NAME   = os.environ.get("DB_NAME",    "yamyamdb")
+S3_BUCKET    = os.environ.get("S3_BUCKET",    "yamyam-videos-bucket")
+S3_REGION    = os.environ.get("S3_REGION",    "ap-northeast-2")
+DB_CONTAINER = os.environ.get("DB_CONTAINER", "app-mysql-1")
+DB_USER      = os.environ.get("DB_USER",      "root")
+DB_PASS      = os.environ.get("DB_PASSWORD",  "ssafy")
+DB_NAME      = os.environ.get("DB_NAME",      "yamyamdb")
 
 # 슬롯 할당에서 제외할 user_id  (나 = ssafy5 → id=5)
 EXCLUDE_USER_IDS: set[int] = {
@@ -77,10 +75,11 @@ def save_sync_state(state: dict):
     SYNC_STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-# ── DB 헬퍼 ───────────────────────────────────────────────────────
+# ── DB 헬퍼 (docker exec 경유) ────────────────────────────────────
 def run_mysql(sql: str) -> str:
     result = subprocess.run(
-        ["mysql", f"-h{DB_HOST}", f"-P{DB_PORT}", f"-u{DB_USER}", f"-p{DB_PASS}",
+        ["docker", "exec", DB_CONTAINER,
+         "mysql", f"-u{DB_USER}", f"-p{DB_PASS}",
          "--batch", "--skip-column-names", DB_NAME, "-e", sql],
         capture_output=True, text=True,
     )
@@ -199,7 +198,8 @@ def insert_video_to_db(
         return
 
     result = subprocess.run(
-        ["mysql", f"-h{DB_HOST}", f"-P{DB_PORT}", f"-u{DB_USER}", f"-p{DB_PASS}", DB_NAME],
+        ["docker", "exec", "-i", DB_CONTAINER,
+         "mysql", f"-u{DB_USER}", f"-p{DB_PASS}", DB_NAME],
         input=sql, text=True, capture_output=True,
     )
     if result.returncode != 0:
