@@ -1,0 +1,24 @@
+name: Update parent submodule pointer
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update-parent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout parent yamyam repo
+        uses: actions/checkout@v4
+        with:
+          repository: judy-kimsohui/yamyam
+          token: ${{ secrets.YAMYAM_PAT }}
+
+      - name: Point yamyam-data submodule to latest commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git update-index --cacheinfo 160000,${{ github.sha }},yamyam-data
+          git diff --staged --quiet && echo "이미 최신 상태" && exit 0
+          git commit -m "chore: update yamyam-data → ${GITHUB_SHA::7}"
+          git push
