@@ -33,6 +33,7 @@ GitHub repo (judy-kimsohui/yamyam-data) 의 .mp4 파일 목록을 확인하고,
 
 import json
 import os
+import random
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,22 @@ import urllib.request
 import uuid
 from datetime import date, timedelta
 from pathlib import Path
+
+# ── MZ 식단 소개글 풀 ──────────────────────────────────────────────
+DESCRIPTIONS = [
+    "야미야미", "헤비식사", "오늘도영양", "클린밀", "득근영양",
+    "탄단지완벽", "단짠단짠", "밥심충전", "든든한끼", "굿밀",
+    "식단관리중", "밀프렙완성", "깔끔한맛", "맛집인정", "건강한끼",
+    "단백질충전", "탄수러버", "저칼로리", "영양가득", "맛보장",
+    "먹방각", "꿀조합", "건강픽", "식욕자극", "덮밥러버",
+    "국밥사랑", "든든함주의", "밀프렙", "탄단지", "깔끔식단",
+    "영양밸런스", "먹스타그램", "오늘도맛있다", "건강식", "다이어트중",
+    "굿밥", "점심각", "저녁루틴", "아침식사", "식단성공",
+    "꿀꺽", "맛있는삶", "오늘도화이팅", "깔끔완성", "오늘의식단",
+    "다이어트식단", "배부름주의", "탄단지충전", "뇨끼러버", "꼭꼭씹기",
+    "대충차린상", "혼밥각", "홈메이드", "간편식단", "건강챙기기",
+    "식단기록", "오늘뭐먹지", "맛있으면0칼", "작지만든든", "과식주의보",
+]
 
 # ── 설정 ─────────────────────────────────────────────────────────
 GITHUB_OWNER  = "judy-kimsohui"
@@ -269,7 +286,7 @@ def main():
                 urllib.request.urlretrieve(download_url, tmp_path)
 
             video_url = upload_to_s3(tmp_path, s3_key, dry_run)
-            description = f"GitHub ({Path(github_path).stem[:20]})"
+            description = random.choice(DESCRIPTIONS)
             insert_video_to_db(
                 user_id, team_id, meal_type, meal_date,
                 video_url, description, dry_run,
