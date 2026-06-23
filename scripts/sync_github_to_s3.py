@@ -70,6 +70,7 @@ DB_CONTAINER = os.environ.get("DB_CONTAINER", "app-mysql-1")
 DB_USER      = os.environ.get("DB_USER",      "root")
 DB_PASS      = os.environ.get("DB_PASSWORD",  "ssafy")
 DB_NAME      = os.environ.get("DB_NAME",      "yamyamdb")
+SPRING_URL   = os.environ.get("SPRING_URL",   "http://localhost:8080")
 
 # 슬롯 할당에서 제외할 user_id  (나 = ssafy5 → id=5)
 EXCLUDE_USER_IDS: set[int] = {
@@ -205,24 +206,42 @@ def insert_video_to_db(
     user_id: int, team_id: int, meal_type: str,
     meal_date: date, video_url: str, description: str,
     dry_run: bool,
-):
+) -> int | None:
     sql = (
         f"INSERT INTO VIDEOS (user_id, team_id, meal_type, meal_date, video_url, description) "
         f"VALUES ({user_id}, {team_id}, '{meal_type}', '{meal_date}', "
-        f"'{video_url}', '{description}');"
+        f"'{video_url}', '{description}');\n"
+        f"SELECT LAST_INSERT_ID();"
     )
     if dry_run:
-        print(f"  [dry-run] DB INSERT 건너뜀:\n    {sql}")
-        return
+        print(f"  [dry-run] DB INSERT 건너뜀")
+        return None
 
     result = subprocess.run(
         ["docker", "exec", "-i", DB_CONTAINER,
-         "mysql", "--default-character-set=utf8mb4",
+         "mysql", "--default-character-set=utf8mb4", "--batch", "--skip-column-names",
          f"-u{DB_USER}", f"-p{DB_PASS}", DB_NAME],
         input=sql, text=True, encoding="utf-8", capture_output=True,
     )
     if result.returncode != 0:
         raise RuntimeError(f"DB INSERT 실패: {result.stderr}")
+
+    for line in result.stdout.strip().split("\n"):
+        if line.strip().isdigit():
+            return int(line.strip())
+    return None
+
+
+def trigger_analysis(video_id: int) -> None:
+    url = f"{SPRING_URL}/api/videos/{video_id}/analyze"
+    try:
+        req = urllib.request.Request(url, method="POST", data=b"")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 202:
+                print(f"  AI 분석 시작 (video_id={video_id})")
+            # 204 = 이미 분석됨, 무시
+    except Exception as e:
+        print(f"  ⚠️ AI 분석 트리거 실패 (video_id={video_id}): {e}")
 
 
 # ── 메인 ──────────────────────────────────────────────────────────
@@ -289,10 +308,12 @@ def main():
 
             video_url = upload_to_s3(tmp_path, s3_key, dry_run)
             description = random.choice(DESCRIPTIONS)
-            insert_video_to_db(
+            video_id = insert_video_to_db(
                 user_id, team_id, meal_type, meal_date,
                 video_url, description, dry_run,
             )
+            if video_id:
+                trigger_analysis(video_id)
 
             # 메모리 내 used set 갱신 (같은 슬롯 중복 방지)
             db_used.add((user_id, team_id, meal_type, meal_date.isoformat()))
