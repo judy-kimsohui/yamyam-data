@@ -322,6 +322,17 @@ def trigger_analysis(video_id: int) -> None:
         print(f"  ⚠️ AI 분석 트리거 실패 (video_id={video_id}): {e}")
 
 
+def trigger_hls(video_id: int) -> None:
+    url = f"{SPRING_URL}/api/videos/{video_id}/hls"
+    try:
+        req = urllib.request.Request(url, method="POST", data=b"")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status == 202:
+                print(f"  HLS 트랜스코딩 시작 (video_id={video_id})")
+    except Exception as e:
+        print(f"  ⚠️ HLS 트리거 실패 (video_id={video_id}): {e}")
+
+
 # ── 메인 ──────────────────────────────────────────────────────────
 def main():
     dry_run = "--dry-run" in sys.argv
@@ -391,6 +402,7 @@ def main():
             )
             if video_id:
                 trigger_analysis(video_id)
+                trigger_hls(video_id)
 
             # 메모리 내 used set 갱신 (같은 슬롯 중복 방지)
             db_used.add((user_id, team_id, meal_type, meal_date.isoformat()))
